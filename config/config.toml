@@ -1,0 +1,8 @@
+[app]
+interval_timeout = 0
+
+[switchbot]
+device_id = "0"
+
+[database]
+url = "postgres://root:root@localhost:5432/appdb?options=-c timezone=Asia/Tokyo"

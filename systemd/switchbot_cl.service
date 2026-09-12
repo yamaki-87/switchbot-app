@@ -1,0 +1,16 @@
+[Unit]
+Description=MailBot Service
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/switchbot_ci
+WorkingDirectory=/var/lib/switchbot_ci
+EnvironmentFile=/etc/switchbot/.env
+Restart=always
+StandardOutput=journal
+StandardError=journal
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

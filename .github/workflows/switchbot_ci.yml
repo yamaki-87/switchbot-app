@@ -1,0 +1,58 @@
+name: SwitchBot Collector CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build collector
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build collector
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p dist
+
+          go build \
+            -trimpath \
+            -buildmode=pie \
+            -mod=readonly \
+            -ldflags="-s -w" \
+            -o dist/switchbot_ci \
+            ./src/cmd/collector
+
+      - name: Verify binary
+        run: |
+          file dist/switchbot_ci
+          ls -lh dist/switchbot_ci
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: switchbot_ci
+          path: dist/switchbot_ci
+          if-no-files-found: error
