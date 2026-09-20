@@ -1,5 +1,5 @@
 [Unit]
-Description=MailBot Service
+Description=Switchbot Collector Service
 After=network.target
 
 [Service]

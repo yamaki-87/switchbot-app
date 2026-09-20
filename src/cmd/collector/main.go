@@ -1,17 +1,11 @@
 package main
 
 import (
-	"context"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
+	"github.com/yamaki-87/switchbot-app/src/fw"
 	"github.com/yamaki-87/switchbot-app/src/internal/app"
 	"github.com/yamaki-87/switchbot-app/src/internal/collector"
-	"github.com/yamaki-87/switchbot-app/src/internal/config"
 	"github.com/yamaki-87/switchbot-app/src/internal/db"
 	"github.com/yamaki-87/switchbot-app/src/internal/devicemaster"
 	"github.com/yamaki-87/switchbot-app/src/internal/repo"
@@ -19,20 +13,11 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load()
+	initOut, err := fw.Init()
+	utils.FatalIfErr(err, "init failed")
+	defer initOut.Stop()
 
-	err := config.LoadSettings(os.Getenv("SETTING_PATH"))
-	utils.FatalIfErr(err, "load settings failed")
-
-	settings := config.GetSettings()
-	client := &http.Client{
-		Timeout: time.Duration(settings.Config.App.IntervalTimeout) * time.Second,
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	err = db.DbInit(ctx, settings.Config.Database.URL)
+	err = db.DbInit(initOut.Ctx, initOut.Settings.Config.Database.URL)
 	utils.FatalIfErr(err, "db init failed")
 
 	dbConn := db.GetDBConn()
@@ -46,12 +31,12 @@ func main() {
 	interval := deviceMaster[0].PollingIntervalSec
 	colletorLogic := collector.NewCollectorLogic(deviceStatusRepo)
 	collectorApp := app.NewCollectorApp(
-		client,
+		initOut.Client,
 		colletorLogic,
 		deviceMaster,
-		settings.Secret.Token,
-		settings.Secret.Secret,
+		initOut.Settings.Secret.Token,
+		initOut.Settings.Secret.Secret,
 	)
 
-	collectorApp.Run(ctx, time.Duration(interval)*time.Second)
+	collectorApp.Run(initOut.Ctx, time.Duration(interval)*time.Second)
 }

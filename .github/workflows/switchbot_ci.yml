@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build collector
+    name: Build SwitchBot tools
     runs-on: ubuntu-latest
 
     steps:
@@ -45,14 +45,37 @@ jobs:
             -o dist/switchbot_ci \
             ./src/cmd/collector
 
-      - name: Verify binary
+      - name: Build health
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go build \
+            -trimpath \
+            -buildmode=pie \
+            -mod=readonly \
+            -ldflags="-s -w" \
+            -o dist/switchbot_health \
+            ./src/cmd/health
+
+      - name: Verify binaries
         run: |
           file dist/switchbot_ci
+          file dist/switchbot_health
           ls -lh dist/switchbot_ci
+          ls -lh dist/switchbot_health
 
-      - name: Upload artifact
+      - name: Upload collector artifact
         uses: actions/upload-artifact@v7
         with:
           name: switchbot_ci
           path: dist/switchbot_ci
+          if-no-files-found: error
+
+      - name: Upload health artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: switchbot_health
+          path: dist/switchbot_health
           if-no-files-found: error

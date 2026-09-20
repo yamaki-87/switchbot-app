@@ -1,10 +1,8 @@
 package switchbotapi
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/yamaki-87/switchbot-app/src/internal/dto"
@@ -22,11 +20,7 @@ func GetDeviceStatus(client *http.Client, now time.Time, reqDto dto.DeviceStatus
 		return dto.DeviceStatus{}, err
 	}
 
-	req.Header.Set("Authorization", reqDto.Token)
-	req.Header.Set("sign", sign)
-	req.Header.Set("t", strconv.FormatInt(timestamp, 10))
-	req.Header.Set("nonce", nonce)
-	req.Header.Set("Content-Type", "application/json")
+	headerReqSet(req, reqDto.Token, sign, nonce, timestamp)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -36,7 +30,7 @@ func GetDeviceStatus(client *http.Client, now time.Time, reqDto dto.DeviceStatus
 
 	var result dto.DeviceStatusResponse
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := utils.DecodeJSON(resp.Body, &result); err != nil {
 		return dto.DeviceStatus{}, err
 	}
 

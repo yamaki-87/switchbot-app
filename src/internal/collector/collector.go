@@ -23,27 +23,45 @@ var previousManager = make(map[string]dto.PreviousCollector)
 
 func (c *CollectorLogic) Collect(in *dto.CollectorIn) (dto.DeviceStatusInsertDto, error) {
 	now := utils.GetTimeNow()
+
 	req := dto.DeviceStatusRequest{
 		Token:    in.Token,
 		Secret:   in.Secret,
 		DeviceID: in.DeviceId,
 	}
-	deviceStatus, apiErr := switchbotapi.GetDeviceStatus(in.Client, now, req)
 
-	previousValue, ok := previousManager[in.DeviceId]
+	deviceStatus, apiErr := switchbotapi.GetDeviceStatus(
+		in.Client,
+		now,
+		req,
+	)
+
 	var intervalKwh float64
-	if ok {
-		elapsed := now.Sub(previousValue.PreviousTime)
-		averageW := (previousValue.PreviousStatus.Weight + deviceStatus.Weight) / 2
-		intervalKwh = averageW * elapsed.Hours() / 1000
-	}
-	collectionStatus := getCollectionStatus(apiErr)
-	insertDto := deviceStatusInsertDtoTo(&deviceStatus, now, intervalKwh, collectionStatus)
 
-	previousManager[in.DeviceId] = dto.PreviousCollector{
-		PreviousTime:   now,
-		PreviousStatus: &deviceStatus,
+	if apiErr == nil {
+		if previousValue, ok := previousManager[in.DeviceId]; ok {
+			elapsed := now.Sub(previousValue.PreviousTime)
+			averageW := (previousValue.PreviousStatus.Weight + deviceStatus.Weight) / 2
+
+			intervalKwh = averageW * elapsed.Hours() / 1000
+		}
+
+		previousManager[in.DeviceId] = dto.PreviousCollector{
+			PreviousTime:   now,
+			PreviousStatus: &deviceStatus,
+		}
 	}
+
+	collectionStatus := getCollectionStatus(apiErr)
+
+	insertDto := deviceStatusInsertDtoTo(
+		&deviceStatus,
+		now,
+		intervalKwh,
+		collectionStatus,
+		in.DeviceId,
+	)
+
 	return insertDto, apiErr
 }
 
@@ -62,11 +80,12 @@ func getCollectionStatus(apiErr error) CollectionStatus {
 	return SUCCESS
 }
 
-func deviceStatusInsertDtoTo(deviceStatus *dto.DeviceStatus, now time.Time, intervalKwh float64, collectionStatus CollectionStatus) dto.DeviceStatusInsertDto {
+func deviceStatusInsertDtoTo(deviceStatus *dto.DeviceStatus, now time.Time, intervalKwh float64, collectionStatus CollectionStatus, deviceId string) dto.DeviceStatusInsertDto {
 	var result dto.DeviceStatusInsertDto
 	if collectionStatus == FAILED {
 		result = dto.DeviceStatusInsertDto{
-			DeviceID:         deviceStatus.DeviceID,
+			// API取得時にDeviceStatusが取得できないため、予め取得したdeviceIdを使用
+			DeviceID:         deviceId,
 			CreateTimeStamp:  now,
 			PowerW:           nil,
 			VoltageV:         nil,
