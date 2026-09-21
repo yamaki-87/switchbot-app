@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"sync"
 	"time"
 
 	"github.com/yamaki-87/switchbot-app/src/internal/dto"
@@ -11,15 +12,17 @@ import (
 
 type CollectorLogic struct {
 	deviceStatusRepo repo.DeviceStatusRepo
+	previousHolder   map[string]dto.PreviousCollector
+	mu               sync.Mutex
 }
 
 func NewCollectorLogic(deviceStatusRepo repo.DeviceStatusRepo) *CollectorLogic {
 	return &CollectorLogic{
 		deviceStatusRepo: deviceStatusRepo,
+		previousHolder:   make(map[string]dto.PreviousCollector),
+		mu:               sync.Mutex{},
 	}
 }
-
-var previousManager = make(map[string]dto.PreviousCollector)
 
 func (c *CollectorLogic) Collect(in *dto.CollectorIn) (dto.DeviceStatusInsertDto, error) {
 	now := utils.GetTimeNow()
@@ -39,17 +42,7 @@ func (c *CollectorLogic) Collect(in *dto.CollectorIn) (dto.DeviceStatusInsertDto
 	var intervalKwh float64
 
 	if apiErr == nil {
-		if previousValue, ok := previousManager[in.DeviceId]; ok {
-			elapsed := now.Sub(previousValue.PreviousTime)
-			averageW := (previousValue.PreviousStatus.Weight + deviceStatus.Weight) / 2
-
-			intervalKwh = averageW * elapsed.Hours() / 1000
-		}
-
-		previousManager[in.DeviceId] = dto.PreviousCollector{
-			PreviousTime:   now,
-			PreviousStatus: &deviceStatus,
-		}
+		intervalKwh = c.updatePrevious(in.DeviceId, now, deviceStatus)
 	}
 
 	collectionStatus := getCollectionStatus(apiErr)
@@ -106,4 +99,28 @@ func deviceStatusInsertDtoTo(deviceStatus *dto.DeviceStatus, now time.Time, inte
 	}
 
 	return result
+}
+
+func (c *CollectorLogic) updatePrevious(
+	deviceID string,
+	now time.Time,
+	deviceStatus dto.DeviceStatus,
+) float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var intervalKwh float64
+
+	if previousValue, ok := c.previousHolder[deviceID]; ok {
+		elapsed := now.Sub(previousValue.PreviousTime)
+		averageW := (previousValue.PreviousStatus.Weight + deviceStatus.Weight) / 2
+		intervalKwh = averageW * elapsed.Hours() / 1000
+	}
+
+	c.previousHolder[deviceID] = dto.PreviousCollector{
+		PreviousTime:   now,
+		PreviousStatus: &deviceStatus,
+	}
+
+	return intervalKwh
 }
