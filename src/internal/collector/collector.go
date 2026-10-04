@@ -1,48 +1,40 @@
 package collector
 
 import (
+	"context"
 	"sync"
 	"time"
 
+	"github.com/yamaki-87/switchbot-app/src/internal/domain"
 	"github.com/yamaki-87/switchbot-app/src/internal/dto"
 	"github.com/yamaki-87/switchbot-app/src/internal/repo"
-	"github.com/yamaki-87/switchbot-app/src/internal/switchbotapi"
 	"github.com/yamaki-87/switchbot-app/src/internal/utils"
 )
 
 type CollectorLogic struct {
 	deviceStatusRepo repo.DeviceStatusRepo
+	deviceStatusGateway DeviceStatusGateway
 	previousHolder   map[string]dto.PreviousCollector
 	mu               sync.Mutex
 }
 
-func NewCollectorLogic(deviceStatusRepo repo.DeviceStatusRepo) *CollectorLogic {
+func NewCollectorLogic(deviceStatusRepo repo.DeviceStatusRepo, gateway DeviceStatusGateway) *CollectorLogic {
 	return &CollectorLogic{
 		deviceStatusRepo: deviceStatusRepo,
+		deviceStatusGateway: gateway,
 		previousHolder:   make(map[string]dto.PreviousCollector),
 		mu:               sync.Mutex{},
 	}
 }
 
-func (c *CollectorLogic) Collect(in *dto.CollectorIn) (dto.DeviceStatusInsertDto, error) {
+func (c *CollectorLogic) Collect(ctx context.Context, deviceID string) (dto.DeviceStatusInsertDto, error) {
 	now := utils.GetTimeNow()
-
-	req := dto.DeviceStatusRequest{
-		Token:    in.Token,
-		Secret:   in.Secret,
-		DeviceID: in.DeviceId,
-	}
-
-	deviceStatus, apiErr := switchbotapi.GetDeviceStatus(
-		in.Client,
-		now,
-		req,
-	)
+	deviceStatus, apiErr := c.deviceStatusGateway.GetDeviceStatus(ctx, deviceID)
 
 	var intervalKwh float64
 
 	if apiErr == nil {
-		intervalKwh = c.updatePrevious(in.DeviceId, now, deviceStatus)
+		intervalKwh = c.updatePrevious(deviceID, now, deviceStatus)
 	}
 
 	collectionStatus := getCollectionStatus(apiErr)
@@ -52,7 +44,7 @@ func (c *CollectorLogic) Collect(in *dto.CollectorIn) (dto.DeviceStatusInsertDto
 		now,
 		intervalKwh,
 		collectionStatus,
-		in.DeviceId,
+		deviceID,
 	)
 
 	return insertDto, apiErr
@@ -73,7 +65,7 @@ func getCollectionStatus(apiErr error) CollectionStatus {
 	return SUCCESS
 }
 
-func deviceStatusInsertDtoTo(deviceStatus *dto.DeviceStatus, now time.Time, intervalKwh float64, collectionStatus CollectionStatus, deviceId string) dto.DeviceStatusInsertDto {
+func deviceStatusInsertDtoTo(deviceStatus *domain.PowerReading, now time.Time, intervalKwh float64, collectionStatus CollectionStatus, deviceId string) dto.DeviceStatusInsertDto {
 	var result dto.DeviceStatusInsertDto
 	if collectionStatus == FAILED {
 		result = dto.DeviceStatusInsertDto{
@@ -90,9 +82,9 @@ func deviceStatusInsertDtoTo(deviceStatus *dto.DeviceStatus, now time.Time, inte
 		result = dto.DeviceStatusInsertDto{
 			DeviceID:         deviceStatus.DeviceID,
 			CreateTimeStamp:  now,
-			PowerW:           &deviceStatus.Weight,
-			VoltageV:         &deviceStatus.Voltage,
-			CurrentMa:        &deviceStatus.ElectricCurrent,
+			PowerW:           &deviceStatus.PowerW,
+			VoltageV:         &deviceStatus.VoltageV,
+			CurrentMa:        &deviceStatus.CurrentMa,
 			IntervalKwh:      &intervalKwh,
 			CollectionStatus: int16(collectionStatus),
 		}
@@ -104,7 +96,7 @@ func deviceStatusInsertDtoTo(deviceStatus *dto.DeviceStatus, now time.Time, inte
 func (c *CollectorLogic) updatePrevious(
 	deviceID string,
 	now time.Time,
-	deviceStatus dto.DeviceStatus,
+	deviceStatus domain.PowerReading,
 ) float64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -113,7 +105,7 @@ func (c *CollectorLogic) updatePrevious(
 
 	if previousValue, ok := c.previousHolder[deviceID]; ok {
 		elapsed := now.Sub(previousValue.PreviousTime)
-		averageW := (previousValue.PreviousStatus.Weight + deviceStatus.Weight) / 2
+		averageW := (previousValue.PreviousStatus.PowerW + deviceStatus.PowerW) / 2
 		intervalKwh = averageW * elapsed.Hours() / 1000
 	}
 

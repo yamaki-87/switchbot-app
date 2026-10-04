@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
@@ -12,20 +11,14 @@ import (
 )
 
 type CollectorApp struct {
-	client         *http.Client
 	collectorLogic *collector.CollectorLogic
 	devices        []dto.DeviceMaster
-	token          string
-	secret         string
 }
 
-func NewCollectorApp(client *http.Client, collectorLogic *collector.CollectorLogic, devices []dto.DeviceMaster, token, secret string) *CollectorApp {
+func NewCollectorApp(collectorLogic *collector.CollectorLogic, devices []dto.DeviceMaster) *CollectorApp {
 	return &CollectorApp{
-		client:         client,
 		collectorLogic: collectorLogic,
 		devices:        devices,
-		token:          token,
-		secret:         secret,
 	}
 }
 
@@ -55,22 +48,15 @@ func (a *CollectorApp) outputStartLog(interval time.Duration) {
 	slog.Info("collector started", " devices", result, "interval", interval)
 }
 
-func (a *CollectorApp) collectOnce(_ctx context.Context) {
+func (a *CollectorApp) collectOnce(ctx context.Context) {
 	resultCh := make(
 		chan dto.DeviceStatusInsertDto,
 		len(a.devices),
 	)
 
 	for _, device := range a.devices {
-		in := &dto.CollectorIn{
-			Client:   a.client,
-			DeviceId: device.DeviceId,
-			Token:    a.token,
-			Secret:   a.secret,
-		}
-
 		go func() {
-			status, err := a.collectorLogic.Collect(in)
+			status, err := a.collectorLogic.Collect(ctx, device.DeviceId)
 			if err != nil {
 				slog.Error(
 					"collect failed",

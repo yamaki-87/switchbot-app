@@ -33,3 +33,28 @@ CREATE TABLE switchbot_power (
         FOREIGN KEY (device_id)
         REFERENCES switchbot_device(device_id)
 );
+
+CREATE INDEX idx_switchbot_power_timestamp
+ON switchbot_power (create_timestamp);
+
+CREATE TABLE switchbot_notify (
+    notify_id         serial PRIMARY KEY,
+    device_id         text NOT NULL,
+    status            smallint NOT NULL,
+    notify_msg        text,
+    create_timestamp  timestamptz NOT NULL DEFAULT now(),
+    update_timestamp  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE switchbot_power_daily_summary (
+    device_id         text NOT NULL,
+    process_date      date NOT NULL,
+    sum_kwh           double precision NOT NULL,
+    create_timestamp  timestamptz NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (device_id, process_date),
+
+    CONSTRAINT fk_switchbot_power_daily_summary_device
+        FOREIGN KEY (device_id)
+        REFERENCES switchbot_device(device_id)
+);

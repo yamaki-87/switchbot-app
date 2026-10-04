@@ -59,6 +59,10 @@ func (db *DBPgxConn) BeginTx() (pgx.Tx, error) {
 	return db.inner.Begin(db.ctx)
 }
 
+func (db *DBPgxConn) QueryRow(query string, args ...any) pgx.Row {
+	return db.inner.QueryRow(db.ctx, query, args...)
+}
+
 func CoolectRows[T any](rows pgx.Rows) ([]T, error) {
 	return pgx.CollectRows(rows, pgx.RowToStructByName[T])
 }

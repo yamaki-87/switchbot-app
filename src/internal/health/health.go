@@ -1,33 +1,27 @@
 package health
 
 import (
+	"context"
 	"log/slog"
-
-	"github.com/yamaki-87/switchbot-app/src/internal/dto"
-	"github.com/yamaki-87/switchbot-app/src/internal/switchbotapi"
-	"github.com/yamaki-87/switchbot-app/src/internal/utils"
 )
 
 type HealthCheckLogic struct {
+	gateway DeviceListGateway
 }
 
-func NewHealthCheckLogic() *HealthCheckLogic {
-	return &HealthCheckLogic{}
+func NewHealthCheckLogic(gateway DeviceListGateway) *HealthCheckLogic {
+	return &HealthCheckLogic{gateway: gateway}
 }
 
-func (h *HealthCheckLogic) Check(in *dto.HealthCheckIn) {
-	now := utils.GetTimeNow()
-	req := dto.DeviceListRequest{
-		Token:  in.Token,
-		Secret: in.Secret,
-	}
-	devices, apiErr := switchbotapi.GetDeviceList(in.Client, now, req)
+func (h *HealthCheckLogic) Check(ctx context.Context) {
+	devices, apiErr := h.gateway.GetDeviceList(ctx)
+
 	if apiErr != nil {
 		slog.Error("health check failed", "error", apiErr)
 		return
 	}
 
-	for _, device := range devices.DeviceList {
+	for _, device := range devices {
 		slog.Info("device", "id", device.DeviceID, "name", device.DeviceName, "type", device.DeviceType)
 	}
 	slog.Info("health check succeeded")

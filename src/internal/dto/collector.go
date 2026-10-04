@@ -1,18 +1,12 @@
 package dto
 
 import (
-	"net/http"
 	"time"
+
+	"github.com/yamaki-87/switchbot-app/src/internal/domain"
 )
 
-type CollectorIn struct {
-	Client   *http.Client
-	DeviceId string
-	Token    string
-	Secret   string
-}
-
 type PreviousCollector struct {
-	PreviousTime   time.Time
-	PreviousStatus *DeviceStatus
+	PreviousTime time.Time
+	PreviousStatus *domain.PowerReading
 }

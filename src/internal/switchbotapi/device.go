@@ -1,42 +1,48 @@
 package switchbotapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/yamaki-87/switchbot-app/src/internal/dto"
+	"github.com/yamaki-87/switchbot-app/src/internal/domain"
 	"github.com/yamaki-87/switchbot-app/src/internal/utils"
 )
 
-func GetDeviceStatus(client *http.Client, now time.Time, reqDto dto.DeviceStatusRequest) (dto.DeviceStatus, error) {
-	timestamp := now.UnixMilli()
+func (c *Client) GetDeviceStatus(ctx context.Context, deviceID string) (domain.PowerReading, error) {
+	timestamp := time.Now().UnixMilli()
 	nonce := utils.NewNonce()
-	sign := utils.CreateSignature(reqDto.Token, reqDto.Secret, nonce, timestamp)
+	sign := utils.CreateSignature(c.token, c.secret, nonce, timestamp)
 
-	url := "https://api.switch-bot.com/v1.1/devices/" + reqDto.DeviceID + "/status"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	url := "https://api.switch-bot.com/v1.1/devices/" + deviceID + "/status"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return dto.DeviceStatus{}, err
+		return domain.PowerReading{}, err
 	}
 
-	headerReqSet(req, reqDto.Token, sign, nonce, timestamp)
+	headerReqSet(req, c.token, sign, nonce, timestamp)
 
-	resp, err := client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return dto.DeviceStatus{}, err
+		return domain.PowerReading{}, err
 	}
 	defer resp.Body.Close()
 
-	var result dto.DeviceStatusResponse
+	var result DeviceStatusResponse
 
 	if err := utils.DecodeJSON(resp.Body, &result); err != nil {
-		return dto.DeviceStatus{}, err
+		return domain.PowerReading{}, err
 	}
 
 	if result.StatusCode != SUCCESS_CODE {
-		return dto.DeviceStatus{}, fmt.Errorf("unexpected status code: %d message: %s", result.StatusCode, result.Message)
+		return domain.PowerReading{}, fmt.Errorf("unexpected status code: %d message: %s", result.StatusCode, result.Message)
 	}
 
-	return result.Body, nil
+	return domain.PowerReading{
+		DeviceID: result.Body.DeviceID,
+		PowerW: result.Body.Weight,
+		VoltageV: result.Body.Voltage,
+		CurrentMa: result.Body.ElectricCurrent,
+	}, nil
 }
